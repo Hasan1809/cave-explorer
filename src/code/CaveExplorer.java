@@ -1,45 +1,34 @@
 package code;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
-/**
- * The cave explorer problem: a concrete GenericSearchProblem.
- *
- * This class holds the fixed parts of the cave (the grid, doors and keys)
- * and defines the rules of the game: what each of the 7 actions does,
- * when it is allowed, what it costs, and when the goal is reached.
- */
+// The cave problem. Stores the grid, doors and keys (these never change)
+// and defines the actions, goal test and costs for the generic search.
 public class CaveExplorer extends GenericSearchProblem {
 
-    /** All operators, in the order the search tries them. */
     private static final List<String> OPERATORS = List.of(
             "left", "right", "climbup", "climbdown", "jumpdown", "collect", "unlock");
 
     private static final int STARTING_LIVES = 3;
 
-    /**
-     * One life must always outweigh any amount of energy (energy is at most 500),
-     * so the path cost is livesUsed * LIFE_COST + energyUsed. This makes the
-     * search minimise lives first and energy second, as the assignment requires.
-     */
+    // Energy is at most 500, so making a life cost 1000 means losing fewer
+    // lives is always better, and energy only breaks ties.
     static final int LIFE_COST = 1000;
 
-    private final int[][] grid;     // grid[y][x] = difficulty of the cell, 0 = wall
-    private final int height;       // number of rows
-    private final int width;        // number of columns
-    private final int[][] doorAt;   // doorAt[y][x] = index of the door in that cell, or -1
-    private final int[][] keyAt;    // keyAt[y][x]  = index of the key in that cell, or -1
+    private final int[][] grid;     // grid[y][x] is the cell difficulty, 0 means wall
+    private final int height;
+    private final int width;
+    private final int[][] doors;    // doors[i] = {x, y}
+    private final int[][] keys;     // keys[i] = {x, y}
     private final int numDoors;
-    private final int[][] doors;    // doors[i] = {x, y} of door i
-    private final int[][] keys;     // keys[i]  = {x, y} of key i
+    private final int[][] doorAt;   // index of the door at (x, y), or -1
+    private final int[][] keyAt;    // index of the key at (x, y), or -1
     private final CaveState initialState;
 
-    /**
-     * Parses the cave description string. Its format is
-     * H,W;X,Y;EN,RL;row0;row1;...;row(H-1);doors;keys;
-     * where every row lists the difficulty of each cell from left to right
-     * and doors/keys are flat lists of x,y pairs.
-     */
+    // Input format: H,W;X,Y;EN,RL;row0;row1;...;doors;keys;
     public CaveExplorer(String initString) {
         String[] parts = initString.split(";");
 
@@ -48,7 +37,7 @@ public class CaveExplorer extends GenericSearchProblem {
         width = size[1];
 
         int[] start = parseInts(parts[1]);
-        int[] resources = parseInts(parts[2]); // {energy, rope}
+        int[] energyAndRope = parseInts(parts[2]);
 
         grid = new int[height][];
         for (int row = 0; row < height; row++) {
@@ -59,15 +48,14 @@ public class CaveExplorer extends GenericSearchProblem {
         keys = parsePairs(parts[4 + height]);
         numDoors = doors.length;
 
-        // Lookup tables so the rules can ask "is there a door/key here?" instantly
         doorAt = indexTable(doors);
         keyAt = indexTable(keys);
 
-        initialState = new CaveState(start[0], start[1], resources[0], resources[1],
+        initialState = new CaveState(start[0], start[1], energyAndRope[0], energyAndRope[1],
                 STARTING_LIVES, false, 0, 0);
     }
 
-    /** Turns "4,0,7" into {4, 0, 7}. */
+    // "4,0,7" -> {4, 0, 7}
     private static int[] parseInts(String text) {
         String[] tokens = text.split(",");
         int[] values = new int[tokens.length];
@@ -77,7 +65,7 @@ public class CaveExplorer extends GenericSearchProblem {
         return values;
     }
 
-    /** Turns "3,2,1,0" into {{3, 2}, {1, 0}}: a list of (x, y) coordinates. */
+    // "3,2,1,0" -> {{3, 2}, {1, 0}}
     private static int[][] parsePairs(String text) {
         int[] flat = parseInts(text);
         int[][] pairs = new int[flat.length / 2][];
@@ -87,21 +75,17 @@ public class CaveExplorer extends GenericSearchProblem {
         return pairs;
     }
 
-    /** Builds a height x width table holding the index of the item in each cell, or -1. */
+    // Grid-sized table so we can check if a cell has a door/key without looping
     private int[][] indexTable(int[][] positions) {
         int[][] table = new int[height][width];
         for (int[] row : table) {
-            java.util.Arrays.fill(row, -1);
+            Arrays.fill(row, -1);
         }
         for (int i = 0; i < positions.length; i++) {
             table[positions[i][1]][positions[i][0]] = i;
         }
         return table;
     }
-
-    // ------------------------------------------------------------------
-    // The problem definition required by GenericSearchProblem
-    // ------------------------------------------------------------------
 
     @Override
     public Object getInitialState() {
@@ -113,18 +97,9 @@ public class CaveExplorer extends GenericSearchProblem {
         return OPERATORS;
     }
 
-    /**
-     * Applies an operator, or returns null if the rules do not allow it.
-     *
-     *  left / right      : move 1 cell sideways; no rope or lives needed
-     *  climbup/climbdown : move 1 cell up/down; uses 1 metre of rope
-     *  jumpdown          : move 1 cell down; costs 1 life, only allowed with more than 1 life
-     *  collect           : pick up the key here; only if not already holding one
-     *  unlock            : open the door here using the key being held (the key is used up)
-     *
-     * Every move costs the difficulty of the destination cell in energy, and is
-     * only allowed if the explorer has at least that much energy.
-     */
+    // Returns the new state after applying the operator, or null if it is not allowed.
+    // climbup/climbdown use 1 metre of rope, jumpdown uses 1 life (needs more than 1 left).
+    // You can only hold one key at a time, and unlocking a door uses up the key.
     @Override
     public Object result(Object stateObject, String operator) {
         CaveState s = (CaveState) stateObject;
@@ -162,27 +137,23 @@ public class CaveExplorer extends GenericSearchProblem {
         }
     }
 
-    /**
-     * Shared logic for all 5 movement actions: moves by (dx, dy) and pays the
-     * destination cell's difficulty in energy. The caller has already decided
-     * the new rope and lives values for its own action.
-     * Returns null if the destination is outside the grid, a wall, or too expensive.
-     */
+    // Used by all the movement actions. Moving into a cell costs its difficulty
+    // in energy, so we can't enter walls or cells we don't have enough energy for.
     private CaveState move(CaveState s, int dx, int dy, int newRope, int newLives) {
         int nx = s.x + dx;
         int ny = s.y + dy;
         if (nx < 0 || ny < 0 || ny >= height || nx >= grid[ny].length) {
-            return null; // outside the grid
+            return null;
         }
         int difficulty = grid[ny][nx];
         if (difficulty == 0 || s.energy < difficulty) {
-            return null; // wall, or not enough energy to enter
+            return null;
         }
         return new CaveState(nx, ny, s.energy - difficulty, newRope, newLives,
                 s.carrying, s.keysCollected, s.doorsOpened);
     }
 
-    /** Goal: every door is unlocked and at least one life remains. */
+    // Goal: all doors unlocked and still alive
     @Override
     public boolean goalTest(Object stateObject) {
         CaveState s = (CaveState) stateObject;
@@ -190,7 +161,6 @@ public class CaveExplorer extends GenericSearchProblem {
         return s.doorsOpened == allDoors && s.lives >= 1;
     }
 
-    /** Cost of one step: lives lost weigh LIFE_COST each, plus the energy spent. */
     @Override
     public int stepCost(Object stateObject, String operator, Object nextObject) {
         CaveState s = (CaveState) stateObject;
@@ -200,15 +170,60 @@ public class CaveExplorer extends GenericSearchProblem {
         return livesLost * LIFE_COST + energySpent;
     }
 
-    // ------------------------------------------------------------------
-    // Entry point
-    // ------------------------------------------------------------------
-
-    /**
-     * Solves the cave described by initString using the given strategy
-     * ("UC", "ID" or "AS") and returns "plan;lives;energy;nodes",
-     * or "No Solution" if the doors cannot all be opened.
+    /*
+     * A* heuristic: a lower bound on the energy we still have to spend.
+     *
+     * Entering a cell always costs its difficulty, and some cells can't be avoided:
+     * every locked door has to be entered at least once to unlock it, so we add the
+     * difficulty of each locked door (unless we are already standing on it).
+     * Each unlock also uses up a key, so we still need (locked doors - 1 if we are
+     * carrying a key) more keys, each from a different key cell. We add the
+     * difficulties of the cheapest uncollected key cells, as many as we need
+     * (a key we are standing on counts as 0).
+     *
+     * It is admissible because keys and doors are never on the same cell, so each
+     * counted cell needs its own move into it, and the real path has to pay for all
+     * of them plus the cells in between. Taking the cheapest keys and assuming no
+     * lives are lost can only make the estimate smaller, never bigger than the real cost.
+     *
+     * It is based on energy (the actual cell difficulties) and not on distance.
      */
+    @Override
+    public int heuristic(Object stateObject) {
+        CaveState s = (CaveState) stateObject;
+
+        // locked doors
+        int estimate = 0;
+        int lockedDoors = 0;
+        for (int i = 0; i < numDoors; i++) {
+            if ((s.doorsOpened & (1 << i)) == 0) {
+                lockedDoors++;
+                boolean standingOnIt = doors[i][0] == s.x && doors[i][1] == s.y;
+                if (!standingOnIt) {
+                    estimate += grid[doors[i][1]][doors[i][0]];
+                }
+            }
+        }
+
+        // cheapest keys still needed
+        int keysNeeded = lockedDoors - (s.carrying ? 1 : 0);
+        if (keysNeeded > 0) {
+            List<Integer> keyCosts = new ArrayList<>();
+            for (int i = 0; i < keys.length; i++) {
+                if ((s.keysCollected & (1 << i)) == 0) {
+                    boolean standingOnIt = keys[i][0] == s.x && keys[i][1] == s.y;
+                    keyCosts.add(standingOnIt ? 0 : grid[keys[i][1]][keys[i][0]]);
+                }
+            }
+            Collections.sort(keyCosts);
+            for (int i = 0; i < keysNeeded && i < keyCosts.size(); i++) {
+                estimate += keyCosts.get(i);
+            }
+        }
+        return estimate;
+    }
+
+    // Returns "plan;livesUsed;energyUsed;nodesExpanded" or "No Solution"
     public static String solve(String initString, String strategy) {
         CaveExplorer problem = new CaveExplorer(initString);
         Node goal = problem.search(strategy);

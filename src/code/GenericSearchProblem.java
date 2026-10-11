@@ -7,78 +7,38 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.PriorityQueue;
 
-/**
- * The generic search problem, as presented in class.
- *
- * A search problem is defined by:
- *  - an initial state
- *  - a set of operators (actions)
- *  - a transition function (what state results from applying an operator)
- *  - a goal test
- *  - a path cost function (here: the cost of each single step)
- *
- * This class knows NOTHING about caves, keys or doors. Any concrete problem
- * (like CaveExplorer) extends it and fills in the abstract methods. The
- * search procedure below then works for that problem without any changes.
- *
- * States are stored as plain Objects, so concrete problems MUST give their
- * state class proper equals() and hashCode() methods; that is how we
- * detect repeated states.
- */
+// Generic search problem: initial state, operators, transition function,
+// goal test and path cost. Subclasses fill these in, and search() works for any of them.
+// States are used as HashMap keys, so they need equals() and hashCode().
 public abstract class GenericSearchProblem {
 
-    /** Number of nodes chosen for expansion during the last search. */
     protected int nodesExpanded = 0;
 
-    // ------------------------------------------------------------------
-    // The problem definition: implemented by each concrete problem
-    // ------------------------------------------------------------------
-
-    /** The state the agent starts in. */
     public abstract Object getInitialState();
 
-    /** The names of all operators, in the order they should be tried. */
     public abstract List<String> getOperators();
 
-    /**
-     * The state that results from applying the operator to the state,
-     * or null if the operator cannot be applied there.
-     */
+    // Should return null if the operator can't be applied in this state
     public abstract Object result(Object state, String operator);
 
-    /** True if the state satisfies the goal. */
     public abstract boolean goalTest(Object state);
 
-    /** The cost of going from state to nextState using the operator. */
     public abstract int stepCost(Object state, String operator, Object nextState);
 
-    /**
-     * Estimated cost from the state to the goal; used only by A*.
-     * The default of 0 means "no information"; problems that support A*
-     * override it with a real admissible heuristic.
-     */
+    // Only used by A*, 0 by default
     public int heuristic(Object state) {
         return 0;
     }
 
-    // ------------------------------------------------------------------
-    // The generic search procedure
-    // ------------------------------------------------------------------
-
-    /**
-     * Runs the given strategy on this problem.
-     *
-     * @param strategy "UC" (uniform cost), "ID" (iterative deepening) or "AS" (A*)
-     * @return the goal node, or null if there is no solution
-     */
+    // strategy: "UC", "ID" or "AS". Returns the goal node or null if there is no solution.
     public Node search(String strategy) {
         nodesExpanded = 0;
         switch (strategy) {
             case "UC":
-                // Always expand the node with the cheapest path so far: g(n)
+                // ordered by g(n)
                 return bestFirstSearch(Comparator.comparingInt(Node::getPathCost));
             case "AS":
-                // Always expand the node with the lowest estimated total cost: g(n) + h(n)
+                // ordered by g(n) + h(n)
                 return bestFirstSearch(Comparator.comparingInt(
                         n -> n.getPathCost() + heuristic(n.getState())));
             case "ID":
@@ -88,10 +48,7 @@ public abstract class GenericSearchProblem {
         }
     }
 
-    /**
-     * Creates every child of a node by trying each operator on its state.
-     * Operators that cannot be applied (result returns null) are skipped.
-     */
+    // Applies every operator to the node's state and returns the valid children
     protected Deque<Node> expand(Node node) {
         nodesExpanded++;
         Deque<Node> children = new ArrayDeque<>();
@@ -106,15 +63,9 @@ public abstract class GenericSearchProblem {
         return children;
     }
 
-    /**
-     * Shared by UC and A*: the queue is a priority queue, and the order of
-     * the queue is the only difference between the two strategies.
-     *
-     * Repeated states: bestCost remembers the cheapest path cost found so
-     * far for each state. A node is only added if it reaches its state more
-     * cheaply than before, and a node taken from the queue is skipped if a
-     * cheaper path to its state was found after it was added.
-     */
+    // Used for both UC and A*, the only difference is the queue order.
+    // bestCost keeps the cheapest cost we reached each state with, so we
+    // don't add a state again unless we found a cheaper way to it.
     private Node bestFirstSearch(Comparator<Node> order) {
         PriorityQueue<Node> queue = new PriorityQueue<>(order);
         HashMap<Object, Integer> bestCost = new HashMap<>();
@@ -126,13 +77,12 @@ public abstract class GenericSearchProblem {
         while (!queue.isEmpty()) {
             Node node = queue.poll();
 
-            // An outdated copy: this state was already reached more cheaply
+            // skip old entries, a cheaper path to this state was found later
             if (node.getPathCost() > bestCost.get(node.getState())) {
                 continue;
             }
 
-            // Goal test happens when a node is removed from the queue, not when
-            // it is added; otherwise UC and A* could return a non-optimal plan.
+            // goal test when removing from the queue (not when adding) so the result is optimal
             if (goalTest(node.getState())) {
                 return node;
             }
@@ -145,18 +95,12 @@ public abstract class GenericSearchProblem {
                 }
             }
         }
-        return null; // queue empty: every reachable state was tried, no goal found
+        return null;
     }
 
-    /**
-     * Iterative deepening: run a depth-limited depth-first search with
-     * limit 0, 1, 2, ... until a goal is found.
-     *
-     * The search stops with "no solution" once a whole iteration finishes
-     * without ever being cut off by the limit. That means the full
-     * reachable space fits under the limit and a deeper search would find
-     * nothing new.
-     */
+    // Depth limited search with limit 0, 1, 2, ...
+    // If an iteration finishes without hitting the limit anywhere, the whole
+    // reachable space was searched, so there is no solution.
     private Node iterativeDeepeningSearch() {
         for (int limit = 0; ; limit++) {
             DepthLimitedResult result = depthLimitedSearch(limit);
@@ -169,10 +113,9 @@ public abstract class GenericSearchProblem {
         }
     }
 
-    /** What one depth-limited iteration found. */
     private static class DepthLimitedResult {
-        final Node goal;      // the goal node, or null if none was found
-        final boolean cutOff; // true if some nodes were not expanded because of the limit
+        final Node goal;
+        final boolean cutOff; // true if the limit stopped us from expanding some node
 
         DepthLimitedResult(Node goal, boolean cutOff) {
             this.goal = goal;
@@ -180,14 +123,9 @@ public abstract class GenericSearchProblem {
         }
     }
 
-    /**
-     * Depth-first search that never goes deeper than the limit.
-     * The queue is a stack (last in, first out), which is what makes it depth-first.
-     *
-     * Repeated states: shallowestDepth remembers the shallowest depth at which
-     * each state was reached in THIS iteration. Reaching it again at the same
-     * depth or deeper cannot lead anywhere new, so that node is skipped.
-     */
+    // DFS using a stack, not going deeper than the limit.
+    // shallowestDepth stores the smallest depth each state was seen at in this
+    // iteration; seeing it again at the same depth or deeper is skipped.
     private DepthLimitedResult depthLimitedSearch(int limit) {
         Deque<Node> stack = new ArrayDeque<>();
         HashMap<Object, Integer> shallowestDepth = new HashMap<>();
@@ -205,11 +143,11 @@ public abstract class GenericSearchProblem {
             }
 
             if (node.getDepth() == limit) {
-                cutOff = true; // there may be more below this node; a deeper iteration will look
+                cutOff = true;
                 continue;
             }
 
-            // Push children in reverse so the first operator is popped (tried) first
+            // pushed in reverse so the first operator gets popped first
             for (var it = expand(node).descendingIterator(); it.hasNext(); ) {
                 Node child = it.next();
                 Integer previous = shallowestDepth.get(child.getState());

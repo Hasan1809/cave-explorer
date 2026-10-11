@@ -2,21 +2,14 @@ package code;
 
 import java.util.LinkedList;
 
-/**
- * A node in the search tree, as presented in class.
- *
- * A node is NOT the same thing as a state:
- *  - a state describes a situation in the world (where the explorer is, how much energy is left, ...)
- *  - a node wraps a state together with HOW we reached it (parent, action, depth, cost).
- * The same state can therefore appear in several nodes if it is reachable by different paths.
- */
+// Search tree node: a state plus how we got to it.
 public class Node {
 
-    private final Object state;    // the world state this node represents
-    private final Node parent;     // the node we expanded to get here (null for the root)
-    private final String operator; // the action applied to the parent to reach this node (null for the root)
-    private final int depth;       // number of actions from the root to this node
-    private final int pathCost;    // total cost of all actions from the root to this node
+    private final Object state;
+    private final Node parent;     // null for the root
+    private final String operator; // action applied to the parent, null for the root
+    private final int depth;
+    private final int pathCost;
 
     public Node(Object state, Node parent, String operator, int depth, int pathCost) {
         this.state = state;
@@ -46,16 +39,13 @@ public class Node {
         return pathCost;
     }
 
-    /**
-     * Rebuilds the plan by walking from this node back up to the root,
-     * collecting the operators along the way, then reversing them so they
-     * are in the order they were performed.
-     */
+    // Follows the parents back to the root to get the list of actions.
+    // addFirst puts them back in the right order.
     public LinkedList<String> getPlan() {
         LinkedList<String> plan = new LinkedList<>();
         Node current = this;
         while (current.parent != null) {
-            plan.addFirst(current.operator); // addFirst reverses the order for us
+            plan.addFirst(current.operator);
             current = current.parent;
         }
         return plan;
