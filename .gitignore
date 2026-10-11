@@ -1,0 +1,23 @@
+# Assignment handouts (kept locally, not in the repo)
+description.pdf
+Instructions.pdf
+
+# Compiled output
+bin/
+out/
+*.class
+
+# Eclipse
+.metadata/
+.classpath
+.project
+.settings/
+
+# IntelliJ
+.idea/
+*.iml
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
