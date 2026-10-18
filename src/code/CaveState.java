@@ -27,6 +27,8 @@ public class CaveState {
         this.doorsOpened = doorsOpened;
     }
 
+    // All fields are compared, otherwise different situations (e.g. the same
+    // cell with less rope) would be treated as repeated states.
     @Override
     public boolean equals(Object other) {
         if (this == other) return true;

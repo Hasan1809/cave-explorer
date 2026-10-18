@@ -39,7 +39,8 @@ public class Node {
         return pathCost;
     }
 
-    // actions from the root to this node
+    // Follows the parents back to the root to get the list of actions;
+    // addFirst puts them back in the right order.
     public LinkedList<String> getPlan() {
         LinkedList<String> plan = new LinkedList<>();
         Node current = this;

@@ -55,6 +55,7 @@ public class CaveExplorer extends GenericSearchProblem {
                 STARTING_LIVES, false, 0, 0);
     }
 
+    // "4,12,0" -> {4, 12, 0}
     private static int[] parseInts(String text) {
         String[] tokens = text.split(",");
         int[] values = new int[tokens.length];
@@ -74,6 +75,8 @@ public class CaveExplorer extends GenericSearchProblem {
         return pairs;
     }
 
+    // Grid-sized table saying which door/key (if any) is in each cell, so we
+    // don't have to loop over all doors or keys every time we check a cell
     private int[][] indexTable(int[][] positions) {
         int[][] table = new int[height][width];
         for (int[] row : table) {
@@ -95,7 +98,8 @@ public class CaveExplorer extends GenericSearchProblem {
         return OPERATORS;
     }
 
-    // returns the next state, or null if the action isn't allowed here
+    // Returns the state after applying the operator, or null if it isn't allowed here.
+    // climbup/climbdown use 1 metre of rope and jumpdown uses 1 life.
     @Override
     public Object result(Object stateObject, String operator) {
         CaveState s = (CaveState) stateObject;
@@ -136,7 +140,8 @@ public class CaveExplorer extends GenericSearchProblem {
         }
     }
 
-    // moving into a cell costs its difficulty; walls and cells we can't afford are blocked
+    // Shared by all four movement actions. Moving into a cell costs its difficulty in
+    // energy, so walls, cells outside the grid and cells we can't afford are blocked.
     private CaveState move(CaveState s, int dx, int dy, int newRope, int newLives) {
         int nx = s.x + dx;
         int ny = s.y + dy;
@@ -151,16 +156,20 @@ public class CaveExplorer extends GenericSearchProblem {
                 s.carrying, s.keysCollected, s.doorsOpened);
     }
 
+    // goal: every door unlocked and at least one life left
     @Override
     public boolean goalTest(Object stateObject) {
         CaveState s = (CaveState) stateObject;
-        int allDoors = (1 << numDoors) - 1;
+        int allDoors = (1 << numDoors) - 1; // bitmask with one bit set per door
         return s.doorsOpened == allDoors && s.lives >= 1;
     }
 
     // Repeated-state key for UC and A*: everything except energy.
     // Lives are in the key, so for the same key a lower path cost means more
     // energy left, and the more expensive copy can be dropped.
+    // The fields are packed into one int (a cheaper HashMap key than an object).
+    // They always fit, since the PDF limits the grid to 10x10, rope to 25,
+    // lives to 3, keys to 8 and doors to 5.
     // Bits: x(4) y(4) rope(5) lives(2) carrying(1) keys(8) doors(5)
     @Override
     public Object costSearchKey(Object stateObject) {
@@ -174,8 +183,9 @@ public class CaveExplorer extends GenericSearchProblem {
                 | s.doorsOpened << 24;
     }
 
-    // Repeated-state check for ID: same position, key and masks, where
-    // more energy, rope or lives is never worse.
+    // Repeated-state check for ID: states with the same position, carried key,
+    // collected keys and opened doors are compared using resources() below,
+    // where more energy, rope or lives is never worse. Packed the same way as above.
     // Bits: x(4) y(4) carrying(1) keys(8) doors(5)
     @Override
     public Object dominanceKey(Object stateObject) {
@@ -187,12 +197,15 @@ public class CaveExplorer extends GenericSearchProblem {
                 | s.doorsOpened << 17;
     }
 
+    // the parts of the state where having more is never worse (used by ID)
     @Override
     public int[] resources(Object stateObject) {
         CaveState s = (CaveState) stateObject;
         return new int[]{s.energy, s.rope, s.lives};
     }
 
+    // Cost of one step: each lost life costs LIFE_COST, plus the energy spent.
+    // This way UC and A* minimize lives first and energy second, like the PDF asks.
     @Override
     public int stepCost(Object stateObject, String operator, Object nextObject) {
         CaveState s = (CaveState) stateObject;
@@ -225,6 +238,7 @@ public class CaveExplorer extends GenericSearchProblem {
     public int heuristic(Object stateObject) {
         CaveState s = (CaveState) stateObject;
 
+        // locked doors
         int estimate = 0;
         int lockedDoors = 0;
         for (int i = 0; i < numDoors; i++) {
@@ -237,6 +251,7 @@ public class CaveExplorer extends GenericSearchProblem {
             }
         }
 
+        // cheapest keys still needed
         int keysNeeded = lockedDoors - (s.carrying ? 1 : 0);
         if (keysNeeded > 0) {
             List<Integer> keyCosts = new ArrayList<>();
@@ -254,7 +269,8 @@ public class CaveExplorer extends GenericSearchProblem {
         return estimate;
     }
 
-    // returns "plan;livesUsed;energyUsed;nodesExpanded" or "No Solution"
+    // Runs the search and returns "plan;livesUsed;energyUsed;nodesExpanded",
+    // or "No Solution". The plan is rebuilt by following the goal node's parents.
     public static String solve(String initString, String strategy) {
         CaveExplorer problem = new CaveExplorer(initString);
         Node goal = GenericSearchProblem.search(problem, strategy);
