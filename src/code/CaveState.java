@@ -2,9 +2,8 @@ package code;
 
 import java.util.Objects;
 
-// Everything that can change while the explorer moves around.
-// The grid itself is fixed so it is kept in CaveExplorer instead.
-// Keys and doors are bitmasks: bit i is 1 if key i was collected / door i was opened.
+// The part of the problem that changes while searching (the grid itself is in CaveExplorer).
+// keysCollected / doorsOpened are bitmasks: bit i set = key i taken / door i opened.
 public class CaveState {
 
     final int x;
@@ -12,7 +11,7 @@ public class CaveState {
     final int energy;
     final int rope;
     final int lives;
-    final boolean carrying;   // holding a key right now
+    final boolean carrying;   // holding a key
     final int keysCollected;
     final int doorsOpened;
 
@@ -28,8 +27,6 @@ public class CaveState {
         this.doorsOpened = doorsOpened;
     }
 
-    // All fields have to be compared, otherwise different situations
-    // (e.g. same cell but less rope) would be treated as repeated states.
     @Override
     public boolean equals(Object other) {
         if (this == other) return true;

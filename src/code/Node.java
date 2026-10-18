@@ -2,14 +2,14 @@ package code;
 
 import java.util.LinkedList;
 
-// Search tree node: a state plus how we got to it.
+// Search tree node: state, parent, operator, depth and path cost.
 public class Node {
 
     private final Object state;
     private final Node parent;     // null for the root
-    private final String operator; // action applied to the parent, null for the root
+    private final String operator; // null for the root
     private final int depth;
-    private final int pathCost;
+    private final int pathCost;    // g(n)
 
     public Node(Object state, Node parent, String operator, int depth, int pathCost) {
         this.state = state;
@@ -39,8 +39,7 @@ public class Node {
         return pathCost;
     }
 
-    // Follows the parents back to the root to get the list of actions.
-    // addFirst puts them back in the right order.
+    // actions from the root to this node
     public LinkedList<String> getPlan() {
         LinkedList<String> plan = new LinkedList<>();
         Node current = this;
